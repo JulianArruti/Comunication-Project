@@ -1,56 +1,40 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from pydantic import BaseModel
 import psycopg2
-
-# Definiendo el modelo de los datos
-class Usuario(BaseModel):
-    fecha: str
-    nombre: str
-    fechaNacimiento: str
-    edad: int
+from typing import List, Annotated
+import models
+from database import engine, SessionLocal
+from sqlalchemy.orm import Session
 
 app = FastAPI()
 
-def get_db_connection():
+# Definiendo el modelo de los datos
+class Usuario_Model(BaseModel):
+    Fecha: str
+    Nombre: str
+    FechaNacimiento: str
+    Edad: int
+
+def get_db():
+    db = SessionLocal()
     try:
-        with psycopg2.connect(
-            host="localhost",
-            database="postgres",
-            user="postgres",
-            password="1230",
-            port = 5432
-        ) as conn:
-            with conn.cursor() as cur:
-                cur.execute("""
-                CREATE TABLE IF NOT EXISTS Usuarios (
-                    fecha DATE,
-                    nombre VARCHAR(255),
-                    fechaNacimiento DATE,
-                    edad INT
-                );
-                """)
-                conn.commit()
-    except psycopg2.Error as e:
-        print(f"Ocurrió un error al conectar con la base de datos: {e}")
-    return conn
+        yield db
+    finally:
+        db.close()
 
-@app.post("/usuarios/")
-async def create_usuario(usuario: Usuario):
-    conn = get_db_connection()
-    cur = conn.cursor()
+db_dependency = Annotated[Session, Depends(get_db)]
 
+models.Base.metadata.create_all(bind=engine)
 
+@app.post("/usuarios/", response_model=Usuario_Model)
+async def create_usuario(Usuario_post: Usuario_Model, db: db_dependency):
+    db_usuarios =  models.Usuario(**Usuario_post.model_dump())
+    db.add(db_usuarios)
+    db.commit()
+    db.refresh(db_usuarios)
+    return db_usuarios
 
-    # Inserta los datos en la base de datos
-    cur.execute(
-        "INSERT INTO Usuarios (fecha, nombre, fechaNacimiento, edad) VALUES (%s, %s, %s, %s)",
-        (usuario.fecha, usuario.nombre, usuario.fechaNacimiento, usuario.edad)
-    )
+# Inserta los datos en la base de datos
 
-    conn.commit()
-    cur.close()
-    conn.close()
-
-    return {"message": "Usuario creado con éxito"}
 
 
