@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 import psycopg2
+from typing import List
+import datetime 
 
 # Definiendo el modelo de los datos
 class Usuario(BaseModel):
@@ -53,4 +55,27 @@ async def create_usuario(usuario: Usuario):
 
     return {"message": "Usuario creado con éxito"}
 
+@app.get("/usuarios/", response_model=List[Usuario])
+async def read_usuarios():
+    conn = get_db_connection()
+    cur = conn.cursor()
 
+    # Ejecuta una consulta SQL para obtener todos los usuarios
+    cur.execute("SELECT * FROM Usuarios")
+
+     # Obtiene los nombres de las columnas
+    column_names = [desc[0] for desc in cur.description]
+
+    # Fetch all rows from the curso r
+    usuarios = cur.fetchall()
+
+    # Cierra la conexión a la base de datos
+    cur.close()
+    conn.close()
+
+    # Devuelve los usuarios como una lista de diccionarios
+    return [dict(zip([name if name != 'fechanacimiento' else 'fechaNacimiento' for name in column_names], [str(item) if isinstance(item, datetime.date) else item for item in usuario])) for usuario in usuarios]
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
